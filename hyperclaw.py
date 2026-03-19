@@ -480,7 +480,8 @@ class HyperClaw:
 
     def run(self):
         print_banner(len(self.list_models())); self.handle_command("/help"); self.print_footer()
-        if self.ephemeral: print(c(C.YELLOW, "⚠ Ephemeral Mode\n"))
+        if self.ephemeral: print(c(C.YELLOW, "  ⚠  Ephemeral mode — sessions will not be saved\n"))
+        print(f"  {c(C.GREY, 'Tip:')} {c(C.CYAN, 'type / and press Enter')} {c(C.GREY, 'to open the command picker')}\n")
         while True:
             try:
                 print_frame_top(); inp = input(f"{ts()}User: ").strip(); print_frame_bottom()
