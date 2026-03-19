@@ -501,9 +501,34 @@ class HyperClaw:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--backend"); parser.add_argument("--resume-last", action="store_true"); parser.add_argument("--ephemeral", action="store_true")
-    args = parser.parse_args(); claw = HyperClaw(resume_last=args.resume_last, ephemeral=args.ephemeral)
-    if args.backend and args.backend in claw.backends: claw.active_backend = claw.backends[args.backend]
-    if claw.active_backend == claw.backends.get("server"): claw._start_server()
+    parser = argparse.ArgumentParser(description="HyperClaw — local-first AI chat")
+    parser.add_argument("--backend", help="Force a specific backend (server, anthropic, mistral, openrouter, openai)")
+    parser.add_argument("--resume-last", action="store_true", help="Resume the most recent session")
+    parser.add_argument("--ephemeral", action="store_true", help="Skip session saving")
+    parser.add_argument("--prompt", metavar="TEXT", help="One-shot mode: send a single prompt, print response, exit. Use '-' to read from stdin.")
+    args = parser.parse_args()
+
+    # One-shot mode
+    if args.prompt is not None:
+        prompt_text = sys.stdin.read().strip() if args.prompt == "-" else args.prompt
+        claw = HyperClaw(ephemeral=True)
+        if args.backend and args.backend in claw.backends:
+            claw.active_backend = claw.backends[args.backend]
+        if claw.active_backend == claw.backends.get("server"):
+            claw._start_server()
+        claw.conversation.append({"role": "user", "content": prompt_text})
+        for chunk in claw.active_backend.generate(
+            claw.conversation, claw.config["system_prompt"],
+            claw.max_tokens, claw.temperature, stream=False
+        ):
+            print(chunk, end="", flush=True)
+        print()
+        sys.exit(0)
+
+    # Interactive mode
+    claw = HyperClaw(resume_last=args.resume_last, ephemeral=args.ephemeral)
+    if args.backend and args.backend in claw.backends:
+        claw.active_backend = claw.backends[args.backend]
+    if claw.active_backend == claw.backends.get("server"):
+        claw._start_server()
     claw.run()
