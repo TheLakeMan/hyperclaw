@@ -175,7 +175,8 @@ HyperClaw (Python)
 - **No auto-updates** — your code, your rules, forever
 
 ---
-##Contributing.md
+
 ## Related
 
 - [Hyperion](https://github.com/TheLakeMan/hyperion) — the inference engine HyperClaw runs on
+- [Contributing](https://github.com/TheLakeMan/hyperclaw/blob/master/Contributing.md)
