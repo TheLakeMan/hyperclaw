@@ -1,0 +1,25 @@
+# Config (contains API keys — use config.example.json as template)
+config.json
+
+# Saved conversations
+conversations/
+
+# Session database
+.hyperclaw/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files from development
+*.bak
+*.backup
+*.broken
+*.fix
+*.patch
+*.sdk-backup
+*.before-*
+
+# Hyperion symlink target (local path, won't work on other machines)
+# The install script sets this up automatically

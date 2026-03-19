@@ -1,0 +1,7 @@
+# HyperClaw has zero required dependencies — runs on Python 3.8+ stdlib only.
+#
+# Optional: Anthropic SDK (enables richer tool-calling support)
+#   pip install anthropic
+#
+# Optional: fzf (enables the / interactive command picker)
+#   pacman -S fzf  /  apt install fzf  /  brew install fzf
