@@ -256,7 +256,7 @@ class AnthropicBackend:
 
 # ── HyperClaw ─────────────────────────────────────────────────────────────────
 class HyperClaw:
-    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
+    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
 
     def __init__(self, config_path=None, resume_last=False, ephemeral=False):
         self.script_dir = Path(__file__).parent.resolve(); self.config = self.load_config(config_path or self.script_dir / "config.json")
@@ -402,6 +402,29 @@ class HyperClaw:
             if not path.exists(): print(c(C.RED, f"  ✗ Not found: {path}")); return
             self.conversation = json.loads(path.read_text())
             print(c(C.CYAN, f"  ✓ Loaded {len(self.conversation)} messages from {path.name}"))
+        elif cmd == "config":
+            editor = os.environ.get("EDITOR", "nano")
+            cfg_path = self.script_dir / "config.json"
+            if not cfg_path.exists():
+                import shutil as _sh; _sh.copy(self.script_dir / "config.example.json", cfg_path)
+            subprocess.run([editor, str(cfg_path)])
+            self.config = self.load_config(cfg_path)
+            self.backends = self._init_backends()
+            print(c(C.CYAN, "  ✓ Config reloaded"))
+        elif cmd == "clear-db":
+            if not self.session_manager: print(c(C.YELLOW, "  ⚠ Ephemeral mode — no DB")); return
+            confirm = input(c(C.YELLOW, "  Wipe all sessions? [y/N]: ")).strip().lower()
+            if confirm == "y":
+                db_path = Path.home() / ".hyperclaw" / "sessions.db"
+                if db_path.exists(): db_path.unlink()
+                self.session_manager = SessionManager()
+                self.session_manager.new_session(title=datetime.now().strftime("Session %Y-%m-%d %H:%M"))
+                print(c(C.CYAN, "  ✓ Session database wiped"))
+            else: print(c(C.GREY, "  Cancelled"))
+        elif cmd == "clear-errors":
+            err_path = Path.home() / ".hyperclaw" / "errors.jsonl"
+            if err_path.exists(): err_path.unlink(); print(c(C.CYAN, "  ✓ Error log cleared"))
+            else: print(c(C.GREY, "  Error log is already empty"))
         elif cmd == "clear": print_banner(len(self.list_models())); [print(f"  {c(C.BLUE, f'/{cn:10s}')} {cd}") for cn, cd in self.COMMANDS]
         elif cmd == "sessions":
             if not self.session_manager: print(c(C.YELLOW, "  ⚠ Ephemeral mode — no sessions")); return
