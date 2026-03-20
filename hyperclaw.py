@@ -277,7 +277,7 @@ class AnthropicBackend:
 
 # ── HyperClaw ─────────────────────────────────────────────────────────────────
 class HyperClaw:
-    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council [save]", "Forge persona (temp/perm)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
+    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council", "Forge persona (temp)"), ("council save", "Forge persona (permanent)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
 
     def __init__(self, config_path=None, resume_last=False, ephemeral=False):
         self.script_dir = Path(__file__).parent.resolve(); self.config = self.load_config(config_path or self.script_dir / "config.json")
