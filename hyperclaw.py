@@ -134,10 +134,20 @@ class LocalBackend:
             if stream:
                 for line in iter(proc.stdout.readline, ''):
                     chunk = line.split("Assistant:", 1)[-1] if "Assistant:" in line else line
+                    # Stop if model starts hallucinating user responses
+                    if "\nUser:" in chunk or "\nHuman:" in chunk:
+                        chunk = chunk.split("\nUser:")[0].split("\nHuman:")[0]
+                        yield chunk
+                        break
                     yield chunk
             else:
                 stdout, _ = proc.communicate(timeout=240)
-                yield stdout.split("Assistant:", 1)[-1].strip() if "Assistant:" in stdout else stdout.strip()
+                result = stdout.split("Assistant:", 1)[-1].strip() if "Assistant:" in stdout else stdout.strip()
+                # Strip hallucinated user responses
+                for stop in ["\nUser:", "\nHuman:", "\n\nUser:", "\n\nHuman:"]:
+                    if stop in result:
+                        result = result.split(stop)[0]
+                yield result
         except Exception as e: yield c(C.RED, f"✗ Error: {e}")
 
     def generate(self, messages, system_prompt, max_tokens, temperature=0.7, stream=False):
@@ -160,7 +170,7 @@ class SocketBackend:
         context = system_prompt + "\n\n"
         for msg in messages[-10:]: context += f"{msg['role'].title()}: {msg['content']}\n"
         context += "Assistant:"
-        payload = {"max_tokens": max_tokens, "temperature": temperature, "repetition_penalty": self.config.get("repetition_penalty", 1.1), "prompt": context, "stream": stream}
+        payload = {"max_tokens": max_tokens, "temperature": temperature, "repetition_penalty": self.config.get("repetition_penalty", 1.1), "prompt": context, "stream": stream, "stop": ["\nUser:", "\nHuman:", "\n\nUser:", "\n\nHuman:"]}
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
                 s.connect(str(self.socket_path))
@@ -174,7 +184,14 @@ class SocketBackend:
                         buf += chunk
                         while "\n" in buf:
                             line, buf = buf.split("\n", 1)
-                            try: d = json.loads(line); yield d.get("text", "")
+                            try:
+                                d = json.loads(line)
+                                text = d.get("text", "")
+                                # Stop streaming if model hallucinates user response
+                                if "\nUser:" in text or "\nHuman:" in text:
+                                    yield text.split("\nUser:")[0].split("\nHuman:")[0]
+                                    return
+                                yield text
                             except: yield line
                     else: buf += chunk
                 if not stream:
@@ -185,6 +202,10 @@ class SocketBackend:
                         if not line: continue
                         try: full_text += json.loads(line).get("text", "")
                         except: pass  # skip malformed lines, don't leak raw JSON
+                    # Strip hallucinated user responses (belt + suspenders with stop tokens)
+                    for stop in ["\nUser:", "\nHuman:", "\n\nUser:", "\n\nHuman:"]:
+                        if stop in full_text:
+                            full_text = full_text.split(stop)[0]
                     yield full_text
         except Exception as e: yield c(C.RED, f"✗ Socket error: {e}")
 
