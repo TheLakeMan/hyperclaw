@@ -277,7 +277,7 @@ class AnthropicBackend:
 
 # ── HyperClaw ─────────────────────────────────────────────────────────────────
 class HyperClaw:
-    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council", "Forge persona (temp)"), ("council save", "Forge persona (permanent)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
+    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council", "Forge persona (temp)"), ("council save", "Forge persona (permanent)"), ("council view", "View last forged persona"), ("council edit", "Edit + apply last persona"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
 
     def __init__(self, config_path=None, resume_last=False, ephemeral=False):
         self.script_dir = Path(__file__).parent.resolve(); self.config = self.load_config(config_path or self.script_dir / "config.json")
@@ -455,6 +455,39 @@ class HyperClaw:
             if err_path.exists(): err_path.unlink(); print(c(C.CYAN, "  ✓ Error log cleared"))
             else: print(c(C.GREY, "  Error log is already empty"))
         elif cmd == "council":
+            review_path = Path.home() / ".hyperclaw" / "council_latest.txt"
+            
+            # Handle /council view
+            if len(p) > 1 and p[1] == "view":
+                if not review_path.exists():
+                    print(c(C.YELLOW, "  ⚠ No forged persona yet — run /council first"))
+                    return
+                print_line()
+                print(c(C.CYAN, "  Last Forged Persona:\n"))
+                print(c(C.WHITE, review_path.read_text()))
+                print()
+                return
+            
+            # Handle /council edit
+            if len(p) > 1 and p[1] == "edit":
+                if not review_path.exists():
+                    print(c(C.YELLOW, "  ⚠ No forged persona yet — run /council first"))
+                    return
+                editor = os.environ.get("EDITOR", "nano")
+                subprocess.run([editor, str(review_path)])
+                edited = review_path.read_text().strip()
+                self.config["system_prompt"] = edited
+                print(c(C.CYAN, "  ✓ Edited persona applied to session"))
+                confirm = input(c(C.YELLOW, "  Save to config.json? [y/N]: ")).strip().lower()
+                if confirm == "y":
+                    cfg_path = self.script_dir / "config.json"
+                    if cfg_path.exists():
+                        with open(cfg_path, "r") as f: cfg_data = json.load(f)
+                        cfg_data["system_prompt"] = edited
+                        with open(cfg_path, "w") as f: json.dump(cfg_data, f, indent=2)
+                    print(c(C.CYAN, "  ✓ Saved to config.json"))
+                return
+            
             save_to_disk = len(p) > 1 and p[1] == "save"
             print(c(C.YELLOW, "\n  🔥 Summoning the Council of 12 Disruptors..."))
             council_instruction = """You are an orchestrator channeling a Council of 12 extreme historical disruptors:
@@ -476,7 +509,15 @@ Output ONLY the raw text for the new system prompt. No markdown formatting, no e
                 stream=False
             )).strip()
             if new_prompt.startswith("```"): new_prompt = "\n".join(new_prompt.split("\n")[1:-1]).strip()
+            
+            # Save to review file
+            review_path = Path.home() / ".hyperclaw" / "council_latest.txt"
+            review_path.parent.mkdir(exist_ok=True)
+            review_path.write_text(new_prompt)
+            
+            # Apply to session
             self.config["system_prompt"] = new_prompt
+            
             if save_to_disk:
                 cfg_path = self.script_dir / "config.json"
                 if cfg_path.exists():
@@ -485,8 +526,13 @@ Output ONLY the raw text for the new system prompt. No markdown formatting, no e
                     with open(cfg_path, "w") as f: json.dump(cfg_data, f, indent=2)
                 print(c(C.CYAN, "  ✓ Persona forged and saved to config.json"))
             else:
-                print(c(C.CYAN, "  ✓ Persona forged (session only — use /council save to keep)"))
-            print(f"\n  {c(C.GREY, 'Preview:')}\n  {c(C.WHITE, new_prompt[:300])}...\n")
+                print(c(C.CYAN, "  ✓ Persona forged (active this session)"))
+            
+            print(f"  {c(C.GREY, 'Saved to:')} {c(C.CYAN, str(review_path))}")
+            print(f"  {c(C.GREY, 'Next steps:')}")
+            print(f"    {c(C.BLUE, '/council view')}  — view full text")
+            print(f"    {c(C.BLUE, '/council edit')}  — edit + apply")
+            print(f"    {c(C.BLUE, '/council save')} — make permanent\n")
         elif cmd == "clear": print_banner(len(self.list_models())); [print(f"  {c(C.BLUE, f'/{cn:10s}')} {cd}") for cn, cd in self.COMMANDS]
         elif cmd == "sessions":
             if not self.session_manager: print(c(C.YELLOW, "  ⚠ Ephemeral mode — no sessions")); return
