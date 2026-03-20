@@ -277,7 +277,7 @@ class AnthropicBackend:
 
 # ── HyperClaw ─────────────────────────────────────────────────────────────────
 class HyperClaw:
-    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council", "Forge persona (12 Disruptors)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
+    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council [save]", "Forge persona (temp/perm)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
 
     def __init__(self, config_path=None, resume_last=False, ephemeral=False):
         self.script_dir = Path(__file__).parent.resolve(); self.config = self.load_config(config_path or self.script_dir / "config.json")
@@ -455,6 +455,7 @@ class HyperClaw:
             if err_path.exists(): err_path.unlink(); print(c(C.CYAN, "  ✓ Error log cleared"))
             else: print(c(C.GREY, "  Error log is already empty"))
         elif cmd == "council":
+            save_to_disk = len(p) > 1 and p[1] == "save"
             print(c(C.YELLOW, "\n  🔥 Summoning the Council of 12 Disruptors..."))
             council_instruction = """You are an orchestrator channeling a Council of 12 extreme historical disruptors:
 Steve Jobs, Elon Musk, Napoleon Bonaparte, Ayn Rand, Nikola Tesla, Niccolò Machiavelli, 
@@ -476,13 +477,16 @@ Output ONLY the raw text for the new system prompt. No markdown formatting, no e
             )).strip()
             if new_prompt.startswith("```"): new_prompt = "\n".join(new_prompt.split("\n")[1:-1]).strip()
             self.config["system_prompt"] = new_prompt
-            cfg_path = self.script_dir / "config.json"
-            if cfg_path.exists():
-                with open(cfg_path, "r") as f: cfg_data = json.load(f)
-                cfg_data["system_prompt"] = new_prompt
-                with open(cfg_path, "w") as f: json.dump(cfg_data, f, indent=2)
-            print(c(C.CYAN, "  ✓ Persona forged and saved to config.json"))
-            print(f"\n  {c(C.GREY, 'New Persona Preview:')}\n  {c(C.WHITE, new_prompt[:300])}...\n")
+            if save_to_disk:
+                cfg_path = self.script_dir / "config.json"
+                if cfg_path.exists():
+                    with open(cfg_path, "r") as f: cfg_data = json.load(f)
+                    cfg_data["system_prompt"] = new_prompt
+                    with open(cfg_path, "w") as f: json.dump(cfg_data, f, indent=2)
+                print(c(C.CYAN, "  ✓ Persona forged and saved to config.json"))
+            else:
+                print(c(C.CYAN, "  ✓ Persona forged (session only — use /council save to keep)"))
+            print(f"\n  {c(C.GREY, 'Preview:')}\n  {c(C.WHITE, new_prompt[:300])}...\n")
         elif cmd == "clear": print_banner(len(self.list_models())); [print(f"  {c(C.BLUE, f'/{cn:10s}')} {cd}") for cn, cd in self.COMMANDS]
         elif cmd == "sessions":
             if not self.session_manager: print(c(C.YELLOW, "  ⚠ Ephemeral mode — no sessions")); return
