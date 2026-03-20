@@ -36,6 +36,43 @@ def print_frame_top(): print(c(C.BLUE, "▀" * cols()))
 def print_frame_bottom(): print(c(C.BLUE, "▄" * cols()))
 def ts(): return datetime.now().strftime("[%H:%M:%S] ")
 
+def estimate_tokens(text):
+    """Rough token estimate: words * 1.33"""
+    return int(len(text.split()) * 1.33)
+
+def smart_prune_messages(messages, max_context_tokens=8192, system_prompt="", reserved_output=1024):
+    """
+    Prune messages to fit in context window intelligently:
+    - Always keep first user message (anchor)
+    - Fill from most recent backwards
+    - Stop when we'd exceed max_context_tokens - reserved_output
+    """
+    if not messages:
+        return []
+    
+    budget = max_context_tokens - reserved_output - estimate_tokens(system_prompt)
+    
+    # Always try to keep first message (context anchor)
+    first_msg = messages[0]
+    first_tokens = estimate_tokens(first_msg['content'])
+    
+    # Build from most recent backwards
+    pruned = []
+    used = 0
+    
+    for msg in reversed(messages):
+        msg_tokens = estimate_tokens(msg['content'])
+        if used + msg_tokens > budget:
+            break
+        pruned.insert(0, msg)
+        used += msg_tokens
+    
+    # If we didn't get the first message and there's room, prepend it
+    if pruned and pruned[0] != first_msg and used + first_tokens <= budget:
+        pruned.insert(0, first_msg)
+    
+    return pruned
+
 def print_banner(model_count=0):
     if sys.stdout.isatty(): os.system("clear")
     print(C.LOGO + r"""
@@ -124,7 +161,8 @@ class LocalBackend:
     def is_ready(self): return bool(self.hyperion_bin and self.model_path)
     def _raw_generate(self, messages, system_prompt, max_tokens, temperature=0.7, stream=False):
         context = system_prompt + "\n\n"
-        for msg in messages[-10:]: context += f"{msg['role'].title()}: {msg['content']}\n"
+        pruned = smart_prune_messages(messages, self.config.get("context_size", 8192), system_prompt, max_tokens)
+        for msg in pruned: context += f"{msg['role'].title()}: {msg['content']}\n"
         context += "Assistant:"
         env = os.environ.copy(); env["HYPERION_GPU_LAYERS"] = "33"
         penalty = self.config.get("repetition_penalty", 1.1)
@@ -168,7 +206,8 @@ class SocketBackend:
     def is_ready(self): return self.socket_path.exists()
     def _raw_generate(self, messages, system_prompt, max_tokens, temperature=0.7, stream=False):
         context = system_prompt + "\n\n"
-        for msg in messages[-10:]: context += f"{msg['role'].title()}: {msg['content']}\n"
+        pruned = smart_prune_messages(messages, self.config.get("context_size", 8192), system_prompt, max_tokens)
+        for msg in pruned: context += f"{msg['role'].title()}: {msg['content']}\n"
         context += "Assistant:"
         payload = {"max_tokens": max_tokens, "temperature": temperature, "repetition_penalty": self.config.get("repetition_penalty", 1.1), "prompt": context, "stream": stream, "stop": ["\nUser:", "\nHuman:", "\n\nUser:", "\n\nHuman:"]}
         try:
@@ -229,7 +268,8 @@ class OpenAIBackend:
     def generate(self, messages, system_prompt, max_tokens, temperature=0.7, stream=False):
         if not self.is_ready(): yield c(C.RED, f"✗ {self.provider} not ready"); return
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        payload = {"model": self.model, "messages": [{"role": "system", "content": system_prompt}] + messages[-10:], "max_tokens": max_tokens, "temperature": temperature, "stream": stream}
+        pruned = smart_prune_messages(messages, 128000, system_prompt, max_tokens)  # Most cloud models support 128k
+        payload = {"model": self.model, "messages": [{"role": "system", "content": system_prompt}] + pruned, "max_tokens": max_tokens, "temperature": temperature, "stream": stream}
         if self.tools_enabled: payload["tools"] = TOOL_DEFS
         try:
             req = urllib.request.Request(self.base_url, data=json.dumps(payload).encode(), headers=headers, method="POST")
@@ -258,7 +298,8 @@ class AnthropicBackend:
             headers["Authorization"] = f"Bearer {self.api_key}"
             headers["anthropic-beta"] = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
         else: headers["x-api-key"] = self.api_key
-        payload = {"model": self.model, "messages": messages[-20:], "max_tokens": max_tokens, "temperature": temperature, "system": system_prompt, "stream": stream}
+        pruned = smart_prune_messages(messages, 200000, system_prompt, max_tokens)  # Claude supports 200k
+        payload = {"model": self.model, "messages": pruned, "max_tokens": max_tokens, "temperature": temperature, "system": system_prompt, "stream": stream}
         if self.tools_enabled: payload["tools"] = ANTHROPIC_TOOL_DEFS
         try:
             req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=json.dumps(payload).encode(), headers=headers, method="POST")
