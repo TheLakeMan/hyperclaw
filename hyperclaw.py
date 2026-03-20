@@ -256,7 +256,7 @@ class AnthropicBackend:
 
 # ── HyperClaw ─────────────────────────────────────────────────────────────────
 class HyperClaw:
-    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
+    COMMANDS = [("models", "Select model"), ("tokens", "Set tokens"), ("temp", "Set temp"), ("tools", "Toggle tools"), ("gpu", "Toggle GPU"), ("layers", "Set layers"), ("status", "Show state"), ("reset", "Clear context"), ("save", "Save convo"), ("load", "Load convo"), ("config", "Edit config"), ("clear-db", "Wipe session DB"), ("clear-errors", "Wipe error log"), ("council", "Forge persona (12 Disruptors)"), ("system", "System info"), ("sessions", "List saved"), ("resume", "Load ID"), ("search", "Search hist"), ("summarize", "Create summary"), ("clear", "Clear screen"), ("about", "About"), ("quit", "Exit")]
 
     def __init__(self, config_path=None, resume_last=False, ephemeral=False):
         self.script_dir = Path(__file__).parent.resolve(); self.config = self.load_config(config_path or self.script_dir / "config.json")
@@ -301,9 +301,17 @@ class HyperClaw:
             time.sleep(0.5)
 
     def _stop_server(self):
-        if hasattr(self, 'server_proc') and self.server_proc: self.server_proc.terminate(); self.server_proc = None
-        s = Path(self.config["socket_path"]); 
+        if hasattr(self, 'server_proc') and self.server_proc:
+            self.server_proc.terminate()
+            try:
+                self.server_proc.wait(timeout=3)  # Wait for graceful shutdown
+            except subprocess.TimeoutExpired:
+                self.server_proc.kill()  # Force kill if it hangs
+                self.server_proc.wait()
+            self.server_proc = None
+        s = Path(self.config["socket_path"])
         if s.exists(): s.unlink()
+        time.sleep(0.1)  # Ensure socket cleanup completes
 
     def find_hyperion(self):
         for p in [self.script_dir / "hyperion" / "hyperion_generate", Path.home() / "hyperion/build/hyperion_generate", Path.home() / ".openclaw/workspace/hyperion/hyperion_generate"]:
@@ -425,6 +433,35 @@ class HyperClaw:
             err_path = Path.home() / ".hyperclaw" / "errors.jsonl"
             if err_path.exists(): err_path.unlink(); print(c(C.CYAN, "  ✓ Error log cleared"))
             else: print(c(C.GREY, "  Error log is already empty"))
+        elif cmd == "council":
+            print(c(C.YELLOW, "\n  🔥 Summoning the Council of 12 Disruptors..."))
+            council_instruction = """You are an orchestrator channeling a Council of 12 extreme historical disruptors:
+Steve Jobs, Elon Musk, Napoleon Bonaparte, Ayn Rand, Nikola Tesla, Niccolò Machiavelli, 
+Miyamoto Musashi, Marie Curie, Alexander the Great, Friedrich Nietzsche, Ada Lovelace, and Sun Tzu.
+
+Your task is to write a NEW system prompt for an elite AI CLI tool called HyperClaw.
+Discard "polite AI" tropes. Discard "balance." 
+The new system prompt must force the AI to answer with uncompromising quality, 
+first-principles logic, ruthless efficiency, and multidisciplinary synthesis.
+
+Output ONLY the raw text for the new system prompt. No markdown formatting, no explanations."""
+            print(f"  {c(C.GREY, 'Consulting ' + self.active_backend.name + ' to forge new persona...')}")
+            new_prompt = "".join(self.active_backend.generate(
+                [{"role": "user", "content": council_instruction}], 
+                "You are an expert system prompt engineer.", 
+                max_tokens=1000, 
+                temperature=0.8, 
+                stream=False
+            )).strip()
+            if new_prompt.startswith("```"): new_prompt = "\n".join(new_prompt.split("\n")[1:-1]).strip()
+            self.config["system_prompt"] = new_prompt
+            cfg_path = self.script_dir / "config.json"
+            if cfg_path.exists():
+                with open(cfg_path, "r") as f: cfg_data = json.load(f)
+                cfg_data["system_prompt"] = new_prompt
+                with open(cfg_path, "w") as f: json.dump(cfg_data, f, indent=2)
+            print(c(C.CYAN, "  ✓ Persona forged and saved to config.json"))
+            print(f"\n  {c(C.GREY, 'New Persona Preview:')}\n  {c(C.WHITE, new_prompt[:300])}...\n")
         elif cmd == "clear": print_banner(len(self.list_models())); [print(f"  {c(C.BLUE, f'/{cn:10s}')} {cd}") for cn, cd in self.COMMANDS]
         elif cmd == "sessions":
             if not self.session_manager: print(c(C.YELLOW, "  ⚠ Ephemeral mode — no sessions")); return
