@@ -23,3 +23,10 @@ __pycache__/
 
 # Hyperion symlink target (local path, won't work on other machines)
 # The install script sets this up automatically
+
+# Hyperion binary symlink (local path)
+hyperion
+
+# Python cache
+__pycache__/
+*.pyc
